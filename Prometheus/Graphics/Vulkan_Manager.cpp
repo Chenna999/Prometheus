@@ -87,10 +87,10 @@ namespace Prometheus {
 #endif //DEBUG_MODE
 			std::vector<QueueFamilyProperties> queueFamilies;
 			queueFamilies = m_PhysicalDevice.getQueueFamilyProperties();
-			findQueueFamilySuitable(queueFamilies);
+			VulkanSwapchain::QueueIndecieSet queues = findQueueFamilySuitable(queueFamilies);
 
 			std::vector<DeviceQueueCreateInfo> queueCreateInfos;
-			std::set<int> uniqueQueueIndex = { m_GraphicsQueueIndex, m_PresentQueueIndex };
+			std::set<uint32_t> uniqueQueueIndex = { queues.Graphics, queues.Present };
 
 			float queuePriorities = 1.0f;
 			for (int queueIndex : uniqueQueueIndex) {
@@ -118,11 +118,11 @@ namespace Prometheus {
 
 			m_Device = m_PhysicalDevice.createDevice(deviceInfo);
 
-			m_GraphicsQueue = m_Device.getQueue(m_GraphicsQueueIndex, 0);
-			m_PresentQueue = m_Device.getQueue(m_PresentQueueIndex, 0);
+			m_GraphicsQueue = m_Device.getQueue(queues.Graphics, 0);
+			m_PresentQueue = m_Device.getQueue(queues.Present, 0);
 
-			m_Swapchain = CreateSwapchain();
-			CreateImageViews();
+			m_Swapchain = new VulkanSwapchain(m_Instance, m_Device, m_PhysicalDevice, m_Surface, queues);
+			m_Swapchain->CreateSwapchain(m_Window->getWidth(), m_Window->getHeight());
 			CreateRenderPass();
 			CreateDescriptorSetLayout();
 			CreatePipeline();
@@ -163,10 +163,8 @@ namespace Prometheus {
 			m_Device.destroyRenderPass(m_RenderPass);
 			//m_Device.destroyPipelineCache(m_PipelineCache);
 			m_Device.destroyPipeline(m_Pipeline);
-			for (ImageView view : m_ImageViews) {
-				m_Device.destroyImageView(view);
-			}
-			m_Device.destroySwapchainKHR(m_Swapchain);
+			m_Swapchain->DestroySwapchain();
+			delete m_Swapchain;
 			m_Device.destroy();
 			Vulkan_Utils::Free_Debug_Callback(&m_Instance);
 			m_Instance.destroySurfaceKHR(m_Surface);
@@ -224,13 +222,13 @@ namespace Prometheus {
 			Viewport viewport;
 			viewport.x = 0.0f;
 			viewport.y = 0.0f;
-			viewport.width = (float)m_SwapchainExtent.width;
-			viewport.height = (float)m_SwapchainExtent.height;
+			viewport.width = (float)m_Swapchain->getExtent().width;
+			viewport.height = (float)m_Swapchain->getExtent().height;
 			viewport.maxDepth = 1.0f;
 			viewport.minDepth = 0.0f;
 
 			Rect2D scissor;
-			scissor.extent = m_SwapchainExtent;
+			scissor.extent = m_Swapchain->getExtent();
 			scissor.offset = { 0,0 };
 
 			PipelineViewportStateCreateInfo viewportState;
@@ -306,14 +304,15 @@ namespace Prometheus {
 
 		void VulkanManager::CreateFrameBuffers() {
 			m_FrameBuffers.clear();
-			for (size_t i = 0; i < m_ImageViews.size(); i++) {
-				std::array<ImageView, 2> attachments = { m_ImageViews[i], m_DepthImageView };
+			std::vector<ImageView> imageViews = m_Swapchain->getImageViews();
+			for (size_t i = 0; i < imageViews.size(); i++) {
+				std::array<ImageView, 2> attachments = { imageViews[i], m_DepthImageView };
 				FramebufferCreateInfo framebufferInfo;
 				framebufferInfo.renderPass = m_RenderPass;
 				framebufferInfo.attachmentCount = attachments.size();
 				framebufferInfo.pAttachments = attachments.data();
-				framebufferInfo.width = m_SwapchainExtent.width;
-				framebufferInfo.height = m_SwapchainExtent.height;
+				framebufferInfo.width = m_Swapchain->getExtent().width;
+				framebufferInfo.height = m_Swapchain->getExtent().height;
 				framebufferInfo.layers = 1;
 				m_FrameBuffers.push_back(m_Device.createFramebuffer(framebufferInfo));
 			}
@@ -322,7 +321,7 @@ namespace Prometheus {
 		void VulkanManager::CreateCommandPool() {
 			if (!(m_CommandBuffers.size() > 0)) {
 				CommandPoolCreateInfo commandPoolInfo;
-				commandPoolInfo.queueFamilyIndex = m_GraphicsQueueIndex;
+				commandPoolInfo.queueFamilyIndex = m_Swapchain->getQueueIndecies().Graphics;
 
 				m_CommandPool = m_Device.createCommandPool(commandPoolInfo);
 			}
@@ -352,7 +351,7 @@ namespace Prometheus {
 				renderBeginInfo.renderPass = m_RenderPass;
 				renderBeginInfo.framebuffer = m_FrameBuffers[i];
 				renderBeginInfo.renderArea.offset = { 0,0 };
-				renderBeginInfo.renderArea.extent = m_SwapchainExtent;
+				renderBeginInfo.renderArea.extent = m_Swapchain->getExtent();
 
 				std::array<ClearValue, 2> clearValues = {};
 				clearValues[0].color.setFloat32({ 0.0f, 0.0f, 0.0f, 1.0f });
@@ -374,17 +373,7 @@ namespace Prometheus {
 			}
 		}
 
-		void VulkanManager::CreateImageViews() {
-			m_SwapchainImages = m_Device.getSwapchainImagesKHR(m_Swapchain);
-			m_ImageCount = m_SwapchainImages.size();
-
-			m_ImageViews.clear();
-			m_ImageViews.resize(m_ImageCount);
-
-			for (uint32_t i = 0; i < m_SwapchainImages.size(); i++) {
-				CreateImageView(m_SwapchainImages[i], m_SwapchainImageFormat, ImageAspectFlagBits::eColor, m_ImageViews[i]);
-			}
-		}
+		
 
 		void VulkanManager::CreateVertexBuffer() {
 			DeviceSize size = sizeof(vertices[0]) * vertices.size();
@@ -476,7 +465,7 @@ namespace Prometheus {
 
 		void VulkanManager::CreateRenderPass() {
 			AttachmentDescription colourAttachment;
-			colourAttachment.format = m_SwapchainImageFormat;
+			colourAttachment.format = m_Swapchain->getFormat();
 			colourAttachment.samples = SampleCountFlagBits::e1;
 			colourAttachment.loadOp = AttachmentLoadOp::eClear;
 			colourAttachment.storeOp = AttachmentStoreOp::eStore;
@@ -546,7 +535,7 @@ namespace Prometheus {
 				return false;
 			}
 			if (!checkDeviceExtensionsSupport(device)) return false;
-			m_SwapchainSupportDetails details = querySwapchain(device);
+			SwapchainSupportDetails details = QuerySwapchain(device, m_Surface);
 			if (details.formats.empty() || details.presentModes.empty()) return false;
 			return true;
 		}
@@ -560,95 +549,25 @@ namespace Prometheus {
 			return requiredExtensions.empty();
 		}
 
-		VulkanManager::m_SwapchainSupportDetails VulkanManager::querySwapchain(PhysicalDevice device) {
-			m_SwapchainSupportDetails details;
-			details.capabilities = device.getSurfaceCapabilitiesKHR(m_Surface);
-			details.formats = device.getSurfaceFormatsKHR(m_Surface);
-			details.presentModes = device.getSurfacePresentModesKHR(m_Surface);
-			return details;
-		}
+		
 
-		void VulkanManager::findQueueFamilySuitable(std::vector<QueueFamilyProperties> queueFamilies) {
+		VulkanSwapchain::QueueIndecieSet VulkanManager::findQueueFamilySuitable(std::vector<QueueFamilyProperties> queueFamilies) {
+			VulkanSwapchain::QueueIndecieSet set;
 			for (uint32_t i = 0; i < queueFamilies.size(); i++) {
 				if (queueFamilies[i].queueCount > 0 && m_PhysicalDevice.getSurfaceSupportKHR(i, m_Surface)) {
-					m_PresentQueueIndex = i;
+					set.Present = i;
 				}
 				if (queueFamilies[i].queueCount > 0 && queueFamilies[i].queueFlags & QueueFlagBits::eGraphics) {
-					m_GraphicsQueueIndex = i;
+					set.Graphics = i;
 				}
 			}
-			if (m_GraphicsQueueIndex > -1 && m_PresentQueueIndex > -1) return;
+			if (set.Graphics != UINT32_MAX && set.Present != UINT32_MAX) return set;
 			throw std::runtime_error("Error: Suitable Queue could not be found");
-		}
-
-		SurfaceFormatKHR VulkanManager::chooseSwapchainFormat(const std::vector<SurfaceFormatKHR> availableFormats) {
-			if (availableFormats.size() == 1 && availableFormats[0].format == Format::eUndefined) {
-				return{ Format::eB8G8R8A8Unorm, ColorSpaceKHR::eSrgbNonlinear };
-			}
-			for (const auto& f_format : availableFormats) {
-				if (f_format.format == Format::eB8G8R8A8Unorm && f_format.colorSpace == ColorSpaceKHR::eSrgbNonlinear) return f_format;
-			}
-			return availableFormats[0];
-		}
-
-		PresentModeKHR VulkanManager::choosePresentMode(const std::vector<PresentModeKHR> availableModes) {
-			for (const auto& f_mode : availableModes) {
-				if (f_mode == PresentModeKHR::eMailbox) return f_mode;
-			}
-			return PresentModeKHR::eFifo;
-		}
-
-		Extent2D VulkanManager::chooseSwapchainExtent(const SurfaceCapabilitiesKHR capabilities) {
-			if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) return capabilities.currentExtent;
-			Extent2D actualExtent = { (uint32_t)m_Window->getWidth(), (uint32_t)m_Window->getHeight() };
-			actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, actualExtent.width));
-			actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));
-			return actualExtent;
-		}
-
-		SwapchainKHR VulkanManager::CreateSwapchain(SwapchainKHR &oldSwapchain) {
-			m_SwapchainSupportDetails SwapchainDetails = querySwapchain(m_PhysicalDevice);
-			SurfaceFormatKHR SwapchainFormat = chooseSwapchainFormat(SwapchainDetails.formats);
-			PresentModeKHR SwapchainPresentMode = choosePresentMode(SwapchainDetails.presentModes);
-			m_SwapchainExtent = chooseSwapchainExtent(SwapchainDetails.capabilities);
-			uint32_t ImageCount = SwapchainDetails.capabilities.minImageCount + 1;
-			m_SwapchainImageFormat = SwapchainFormat.format;
-
-			if (SwapchainDetails.capabilities.maxImageCount > 0 && ImageCount > SwapchainDetails.capabilities.maxImageCount) {
-				ImageCount = SwapchainDetails.capabilities.maxImageCount;
-			}
-
-			SwapchainCreateInfoKHR createInfo;
-			createInfo.surface = m_Surface;
-			createInfo.minImageCount = ImageCount;
-			createInfo.imageFormat = SwapchainFormat.format;
-			createInfo.imageColorSpace = SwapchainFormat.colorSpace;
-			createInfo.imageExtent = m_SwapchainExtent;
-			createInfo.imageArrayLayers = 1;
-			createInfo.imageUsage = ImageUsageFlagBits::eColorAttachment;
-			if (m_GraphicsQueueIndex != m_PresentQueueIndex) {
-				uint32_t queueIndicies[] = { (uint32_t)m_GraphicsQueueIndex, (uint32_t)m_PresentQueueIndex };
-				createInfo.imageSharingMode = SharingMode::eConcurrent;
-				createInfo.queueFamilyIndexCount = 2;
-				createInfo.pQueueFamilyIndices = queueIndicies;
-			}
-			else {
-				createInfo.imageSharingMode = SharingMode::eExclusive;
-				createInfo.queueFamilyIndexCount = 0;
-				createInfo.pQueueFamilyIndices = nullptr;
-			}
-			createInfo.preTransform = SwapchainDetails.capabilities.currentTransform;
-			createInfo.compositeAlpha = CompositeAlphaFlagBitsKHR::eOpaque;
-			createInfo.presentMode = SwapchainPresentMode;
-			createInfo.clipped = VK_TRUE;
-			createInfo.oldSwapchain = oldSwapchain;
-
-			return m_Device.createSwapchainKHR(createInfo);
 		}
 
 		void VulkanManager::DrawFrame() {
 			uint32_t ImageIndex;
-			ResultValue<uint32_t> value = m_Device.acquireNextImageKHR(m_Swapchain, std::numeric_limits<uint64_t>::max(), m_ImageSemaphore, Fence());
+			ResultValue<uint32_t> value = m_Device.acquireNextImageKHR(m_Swapchain->getSwapchain(), std::numeric_limits<uint64_t>::max(), m_ImageSemaphore, Fence());
 			if (value.result == Result::eErrorOutOfDateKHR) {
 				RecreateSwapchain();
 				return;
@@ -671,7 +590,7 @@ namespace Prometheus {
 			presentInfo.waitSemaphoreCount = 1;
 			presentInfo.pWaitSemaphores = &m_RenderSemaphore;
 			presentInfo.swapchainCount = 1;
-			presentInfo.pSwapchains = &m_Swapchain;
+			presentInfo.pSwapchains = &(m_Swapchain->getSwapchain());
 			presentInfo.pImageIndices = &ImageIndex;
 
 			if (m_PresentQueue.presentKHR(presentInfo) == Result::eErrorOutOfDateKHR) {
@@ -682,8 +601,8 @@ namespace Prometheus {
 		void VulkanManager::RecreateSwapchain() {
 			m_Device.waitIdle();
 
-			m_Swapchain = CreateSwapchain(m_Swapchain);
-			CreateImageViews();
+			m_Swapchain->DestroySwapchain();
+			m_Swapchain->CreateSwapchain(m_Window->getWidth(), m_Window->getHeight(), m_Window->getVSync());
 			CreateRenderPass();
 			CreatePipeline();
 			CreateDepthResources();
@@ -721,7 +640,7 @@ namespace Prometheus {
 			UniformBufferObject UBO = {};
 			UBO.model = rotate(mat4(), time*radians(90.0f), vec3(0, 0, 1.0f));
 			UBO.view = lookAt(vec3(2.0f, 2.0f, 2.0f), vec3(0, 0, 0), vec3(0, 0, 1.0f));
-			UBO.proj = perspective(radians(45.0f), m_SwapchainExtent.width / (float)m_SwapchainExtent.height, 0.1f, 10.0f);
+			UBO.proj = perspective(radians(45.0f), m_Swapchain->getExtent().width / (float)m_Swapchain->getExtent().height, 0.1f, 10.0f);
 			UBO.proj[1][1] *= -1;
 
 			void* data;
@@ -945,26 +864,10 @@ namespace Prometheus {
 		m_Device.freeCommandBuffers(m_CommandPool, buffer);
 	}
 
-	void VulkanManager::CreateImageView(Image image, Format format, ImageAspectFlags aspectFlags, ImageView &view) {
-		ImageViewCreateInfo createInfo;
-		createInfo.image = image;
-		createInfo.viewType = ImageViewType::e2D;
-		createInfo.format = format;
-		createInfo.subresourceRange.aspectMask = aspectFlags;
-		createInfo.components.a = ComponentSwizzle::eIdentity;
-		createInfo.components.g = ComponentSwizzle::eIdentity;
-		createInfo.components.b = ComponentSwizzle::eIdentity;
-		createInfo.components.r = ComponentSwizzle::eIdentity;
-		createInfo.subresourceRange.baseMipLevel = 0;
-		createInfo.subresourceRange.levelCount = 1;
-		createInfo.subresourceRange.baseArrayLayer = 0;
-		createInfo.subresourceRange.layerCount = 1;
-
-		view = m_Device.createImageView(createInfo);
-	}
+	
 
 	void VulkanManager::CreateTextureImageView() {
-		CreateImageView(m_TextureImage, Format::eR8G8B8A8Unorm, ImageAspectFlagBits::eColor, m_TextureImageView);
+		CreateImageView(m_Device, m_TextureImage, Format::eR8G8B8A8Unorm, ImageAspectFlagBits::eColor, m_TextureImageView);
 	}
 
 	void VulkanManager::CreateTextureSampler() {
@@ -990,8 +893,8 @@ namespace Prometheus {
 
 	void VulkanManager::CreateDepthResources() {
 		Format format = FindDepthFormat();
-		CreateImage(m_SwapchainExtent.width, m_SwapchainExtent.height, format, ImageTiling::eOptimal, ImageUsageFlagBits::eDepthStencilAttachment, MemoryPropertyFlagBits::eDeviceLocal, m_DepthImage, m_DepthImageMemory);
-		CreateImageView(m_DepthImage, format, ImageAspectFlagBits::eDepth, m_DepthImageView);
+		CreateImage(m_Swapchain->getExtent().width, m_Swapchain->getExtent().height, format, ImageTiling::eOptimal, ImageUsageFlagBits::eDepthStencilAttachment, MemoryPropertyFlagBits::eDeviceLocal, m_DepthImage, m_DepthImageMemory);
+		CreateImageView(m_Device, m_DepthImage, format, ImageAspectFlagBits::eDepth, m_DepthImageView);
 		TransitionImageLayout(m_DepthImage, format, ImageLayout::eUndefined, ImageLayout::eDepthStencilAttachmentOptimal);
 	}
 

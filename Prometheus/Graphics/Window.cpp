@@ -65,4 +65,8 @@ namespace Prometheus { namespace Graphics {
 			std::cout << "Message_Pushed" << std::endl;
 		}
 	}
+
+	bool Window::getVSync() {
+		return m_VSync;
+	}
 }}

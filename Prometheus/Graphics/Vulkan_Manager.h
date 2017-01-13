@@ -16,6 +16,7 @@
 
 #include "Window.h"
 #include "../Utils/Utils.h"
+#include "Vulkan_Objects\VulkanSwapchain.h"
 
 using namespace vk;
 
@@ -28,15 +29,9 @@ namespace Prometheus { namespace Graphics {
 		Instance m_Instance;
 		PhysicalDevice m_PhysicalDevice;
 		Device m_Device;
-		Queue m_GraphicsQueue, m_PresentQueue;
 		SurfaceKHR m_Surface;
 		Window* m_Window;
-		SwapchainKHR m_Swapchain;
-		std::vector<Image> m_SwapchainImages;
-		Format m_SwapchainImageFormat;
-		Extent2D m_SwapchainExtent;
-		uint32_t m_ImageCount;
-		std::vector<ImageView> m_ImageViews;
+		Queue m_GraphicsQueue, m_PresentQueue;
 		DescriptorSetLayout m_DescriptorSetLayout;
 		PipelineLayout m_PipelineLayout;
 		RenderPass m_RenderPass;
@@ -48,6 +43,8 @@ namespace Prometheus { namespace Graphics {
 		DeviceMemory m_VertexBufferMemory;
 		Buffer m_IndexBuffer;
 		DeviceMemory m_IndexBufferMemory;
+
+		VulkanSwapchain *m_Swapchain;
 
 		Buffer m_UniformStagingBuffer, m_UniformBuffer;
 		DeviceMemory m_UniformStagingBufferMemory, m_UniformBufferMemory;
@@ -67,19 +64,12 @@ namespace Prometheus { namespace Graphics {
 
 		Semaphore m_ImageSemaphore, m_RenderSemaphore;
 
-		int m_GraphicsQueueIndex = -1, m_PresentQueueIndex = -1;
-
 		
 		const std::vector<const char*> m_DeviceExtentions = {
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME
 		};
 		const std::vector<const char*> m_Validation_Layers = {
 			"VK_LAYER_LUNARG_standard_validation"
-		};
-		struct m_SwapchainSupportDetails {
-			SurfaceCapabilitiesKHR capabilities;
-			std::vector<SurfaceFormatKHR> formats;
-			std::vector<PresentModeKHR> presentModes;
 		};
 
 		struct UniformBufferObject {
@@ -142,18 +132,12 @@ namespace Prometheus { namespace Graphics {
 		void UpdateUniformBuffers();
 	private:
 		bool isDeviceSuitable(PhysicalDevice device);
-		void findQueueFamilySuitable(std::vector<QueueFamilyProperties> queueFamilies);
+		VulkanSwapchain::QueueIndecieSet findQueueFamilySuitable(std::vector<QueueFamilyProperties> queueFamilies);
 		uint32_t findMemoryType(uint32_t typeFilter, MemoryPropertyFlags properties);
 		bool checkDeviceExtensionsSupport(PhysicalDevice device);
-		m_SwapchainSupportDetails querySwapchain(PhysicalDevice device);
-		SurfaceFormatKHR chooseSwapchainFormat(const std::vector<SurfaceFormatKHR> availableFormats);
-		PresentModeKHR choosePresentMode(const std::vector<PresentModeKHR> availableModes);
-		Extent2D chooseSwapchainExtent(const SurfaceCapabilitiesKHR capabilities);
-		SwapchainKHR CreateSwapchain(SwapchainKHR &oldSwapchain = SwapchainKHR());
 		void InitVulkan();
 		void CreateShaderModule(const std::vector<char>& code, ShaderModule& module);
 
-		void CreateImageViews();
 		void CreateRenderPass();
 		void CreateDescriptorSetLayout();
 		void CreatePipeline();
@@ -176,7 +160,6 @@ namespace Prometheus { namespace Graphics {
 		void CreateImage(uint32_t width, uint32_t height, Format format, ImageTiling tiling, ImageUsageFlags usage, MemoryPropertyFlags properties, Image &image, DeviceMemory &imageMemory);
 		void TransitionImageLayout(Image image, Format format, ImageLayout oldLayout, ImageLayout newLayout);
 		void CopyImage(Image srcImage, Image dstImage, uint32_t width, uint32_t height);
-		void CreateImageView(Image image, Format format, ImageAspectFlags aspectFlags, ImageView &view);
 		Format FindSupportedFormat(const std::vector<Format>& formats, ImageTiling tiling, FormatFeatureFlags features);
 		Format FindDepthFormat();
 		bool HasStencilComponent(Format format);

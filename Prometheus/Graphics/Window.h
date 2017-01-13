@@ -16,6 +16,7 @@ namespace Prometheus { namespace Graphics {
 		GLFWwindow* m_Window;
 		GLFWmonitor* m_PrimaryMonitor;
 		bool m_Running;
+		bool m_VSync = false;
 	public:
 		Window();
 		~Window();
@@ -27,6 +28,7 @@ namespace Prometheus { namespace Graphics {
 		const char* getName();
 		int getWidth();
 		int getHeight();
+		bool getVSync();
 		void updateWidth(int newWidth);
 		void updateHeight(int newHeight);
 		void updateName(const char* newName);
