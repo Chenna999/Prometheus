@@ -50,8 +50,8 @@ namespace Prometheus {
 			createInfo.ppEnabledExtensionNames = enabledExtentions.data();
 
 #ifdef DEBUG_MODE
-			createInfo.enabledLayerCount = m_Validation_Layers.size();
-			createInfo.ppEnabledLayerNames = m_Validation_Layers.data();
+			createInfo.enabledLayerCount = Utils::m_Validation_Layers.size();
+			createInfo.ppEnabledLayerNames = Utils::m_Validation_Layers.data();
 #endif //DEBUG_MODE
 
 			{
@@ -85,41 +85,13 @@ namespace Prometheus {
 				std::cout << extension.extensionName << std::endl;
 			}
 #endif //DEBUG_MODE
-			std::vector<QueueFamilyProperties> queueFamilies;
-			queueFamilies = m_PhysicalDevice.getQueueFamilyProperties();
-			VulkanSwapchain::QueueIndecieSet queues = findQueueFamilySuitable(queueFamilies);
+			PhysicalDeviceFeatures features;
+			//TODO: add features here
 
-			std::vector<DeviceQueueCreateInfo> queueCreateInfos;
-			std::set<uint32_t> uniqueQueueIndex = { queues.Graphics, queues.Present };
-
-			float queuePriorities = 1.0f;
-			for (int queueIndex : uniqueQueueIndex) {
-				DeviceQueueCreateInfo queueCreateInfo;
-				queueCreateInfo.queueFamilyIndex = queueIndex;
-				queueCreateInfo.queueCount = 1;
-				queueCreateInfo.pQueuePriorities = &queuePriorities;
-				queueCreateInfos.push_back(queueCreateInfo);
-			}
-
-
-			PhysicalDeviceFeatures deviceFeatures; // TODO: when features are required
-
-			DeviceCreateInfo deviceInfo;
-			deviceInfo.pQueueCreateInfos = queueCreateInfos.data();
-			deviceInfo.queueCreateInfoCount = (uint32_t)queueCreateInfos.size();
-			deviceInfo.pEnabledFeatures = &deviceFeatures;
-			deviceInfo.enabledExtensionCount = m_DeviceExtentions.size();
-			deviceInfo.ppEnabledExtensionNames = m_DeviceExtentions.data();
-
-#ifdef DEBUG_MODE
-			deviceInfo.enabledLayerCount = m_Validation_Layers.size();
-			deviceInfo.ppEnabledLayerNames = m_Validation_Layers.data();
-#endif //DEBUG_MODE
-
-			m_Device = m_PhysicalDevice.createDevice(deviceInfo);
-
-			m_GraphicsQueue = m_Device.getQueue(queues.Graphics, 0);
-			m_PresentQueue = m_Device.getQueue(queues.Present, 0);
+			m_Device = new VulkanDevice(m_PhysicalDevice, m_Surface);
+			m_Device->CreateLogicalDevice(features);
+			m_QueueIndecies = m_Device->GetQueueIndecies();
+			m_Queues = m_Device->GetQueueSet();
 
 			m_Swapchain = new VulkanSwapchain(m_Instance, m_Device, m_PhysicalDevice, m_Surface, queues);
 			m_Swapchain->CreateSwapchain(m_Window->getWidth(), m_Window->getHeight());
@@ -454,14 +426,7 @@ namespace Prometheus {
 			EndSingleTimeCommand(buffer);
 		}
 
-		uint32_t VulkanManager::findMemoryType(uint32_t typeFilter, MemoryPropertyFlags properties) {
-			PhysicalDeviceMemoryProperties deviceMem;
-			deviceMem = m_PhysicalDevice.getMemoryProperties();
-			for (uint32_t i = 0; i < deviceMem.memoryTypeCount; i++) {
-				if ((typeFilter & (1 << i)) && ((deviceMem.memoryTypes[i].propertyFlags & properties) == properties)) return i;
-			}
-
-		}
+		
 
 		void VulkanManager::CreateRenderPass() {
 			AttachmentDescription colourAttachment;

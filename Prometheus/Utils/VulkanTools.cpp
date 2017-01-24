@@ -27,4 +27,15 @@ namespace Prometheus { namespace Tools {
 
 		view = device.createImageView(createInfo);
 	}
+
+	VkBool32 CheckDeviceExtensionPresent(PhysicalDevice device, const char* name) {
+		std::vector<ExtensionProperties> extensions;
+		extensions = device.enumerateDeviceExtensionProperties();
+		for (auto& ext : extensions) {
+			if (!strcmp(name, ext.extensionName)) {
+				return true;
+			}
+		}	
+		return false;
+	}
 }}

@@ -2,6 +2,7 @@
 
 #include "vulkan\vulkan.hpp"
 #include "../../Utils/VulkanTools.h"
+#include "VulkanDevice.h"
 
 namespace Prometheus { namespace Graphics {
 
@@ -11,12 +12,10 @@ namespace Prometheus { namespace Graphics {
 	class VulkanSwapchain {
 	public:
 		struct m_RequestedDetails;
-		struct QueueSet;
-		struct QueueIndecieSet;
 
 	private:
 		Instance m_Instance;
-		Device m_Device;
+		VulkanDevice* m_Device;
 		PhysicalDevice m_PhysicalDevice;
 		SurfaceKHR m_Surface;
 		
@@ -31,18 +30,16 @@ namespace Prometheus { namespace Graphics {
 		uint32_t m_ImageCount;
 		std::vector<Image> m_Images;
 		std::vector<ImageView> m_ImageViews;
-		uint32_t m_GraphicsQueueIndex = UINT32_MAX, m_PresentQueueIndex = UINT32_MAX;
-		Queue m_GraphicsQueue, m_PresentQueue;
+		VulkanDevice::QueueIndecieSet m_QueueIndecies;
+		VulkanDevice::QueueSet m_Queues;
 
 	public:
-		VulkanSwapchain(Instance instance, Device device, PhysicalDevice pDevice, SurfaceKHR surface, QueueIndecieSet indecies);
+		VulkanSwapchain(Instance instance, VulkanDevice* device);
 		void CreateSwapchain(int width, int height, const bool vsync = false);
 		void DestroySwapchain();
 		void PresentImage(Queue queue, uint32_t imageIndex, Semaphore waitSemaphore = (VkSemaphore)VK_NULL_HANDLE);
 		
 		SwapchainKHR getSwapchain();
-		QueueIndecieSet getQueueIndecies();
-		QueueSet getQueues();
 		Extent2D getExtent();
 		std::vector<Image> getImages();
 		std::vector<ImageView> getImageViews();
@@ -50,15 +47,6 @@ namespace Prometheus { namespace Graphics {
 
 	public:
 		
-
-		struct QueueIndecieSet {
-			uint32_t Graphics = UINT32_MAX, Present = UINT32_MAX;
-		};
-
-		struct QueueSet {
-			Queue Graphics, Present;
-		};
-
 		struct m_RequestedDetails {
 			int width, height;
 			bool vsync;

@@ -22,4 +22,5 @@ namespace Prometheus {namespace Tools {
 
 	SwapchainSupportDetails QuerySwapchain(PhysicalDevice device, SurfaceKHR surface);
 	void CreateImageView(Device device, Image image, Format format, ImageAspectFlags aspectFlags, ImageView& view, ImageSwizzle swizzle = ImageSwizzle());
+	VkBool32 CheckDeviceExtensionPresent(PhysicalDevice device, const char* extensionName);
 }}

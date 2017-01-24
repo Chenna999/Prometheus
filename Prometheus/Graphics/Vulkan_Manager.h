@@ -17,6 +17,7 @@
 #include "Window.h"
 #include "../Utils/Utils.h"
 #include "Vulkan_Objects\VulkanSwapchain.h"
+#include "Vulkan_Objects\VulkanDevice.h"
 
 using namespace vk;
 
@@ -28,10 +29,9 @@ namespace Prometheus { namespace Graphics {
 	private:
 		Instance m_Instance;
 		PhysicalDevice m_PhysicalDevice;
-		Device m_Device;
 		SurfaceKHR m_Surface;
 		Window* m_Window;
-		Queue m_GraphicsQueue, m_PresentQueue;
+		VulkanDevice::QueueSet m_Queues;
 		DescriptorSetLayout m_DescriptorSetLayout;
 		PipelineLayout m_PipelineLayout;
 		RenderPass m_RenderPass;
@@ -45,6 +45,7 @@ namespace Prometheus { namespace Graphics {
 		DeviceMemory m_IndexBufferMemory;
 
 		VulkanSwapchain *m_Swapchain;
+		VulkanDevice* m_Device;
 
 		Buffer m_UniformStagingBuffer, m_UniformBuffer;
 		DeviceMemory m_UniformStagingBufferMemory, m_UniformBufferMemory;
@@ -68,9 +69,7 @@ namespace Prometheus { namespace Graphics {
 		const std::vector<const char*> m_DeviceExtentions = {
 			VK_KHR_SWAPCHAIN_EXTENSION_NAME
 		};
-		const std::vector<const char*> m_Validation_Layers = {
-			"VK_LAYER_LUNARG_standard_validation"
-		};
+		
 
 		struct UniformBufferObject {
 			mat4 model;

@@ -22,6 +22,9 @@ namespace Prometheus {
 	class Utils {
 	public:
 		static std::vector<char> ImportShader(const std::string& fileName);
+		static const std::vector<const char*> m_Validation_Layers = {
+			"VK_LAYER_LUNARG_standard_validation"
+		};
 	};
 
 	static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objType, uint64_t obj, size_t location, int32_t code, const char* layerPrefix, const char* msg, void* userData) {

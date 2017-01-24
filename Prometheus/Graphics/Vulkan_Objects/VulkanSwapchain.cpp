@@ -26,8 +26,8 @@ void VulkanSwapchain::CreateSwapchain(int width, int height,const bool vsync) {
 	createInfo.imageExtent = m_SwapchainExtent;
 	createInfo.imageArrayLayers = 1;
 	createInfo.imageUsage = ImageUsageFlagBits::eColorAttachment;
-	if (m_GraphicsQueueIndex != m_PresentQueueIndex) {
-		uint32_t queueIndicies[] = { (uint32_t)m_GraphicsQueueIndex, (uint32_t)m_PresentQueueIndex };
+	if (m_QueueIndecies.Graphics != m_QueueIndecies.Present) {
+		uint32_t queueIndicies[] = { (uint32_t)m_QueueIndecies.Graphics, (uint32_t)m_QueueIndecies.Present };
 		createInfo.imageSharingMode = SharingMode::eConcurrent;
 		createInfo.queueFamilyIndexCount = 2;
 		createInfo.pQueueFamilyIndices = queueIndicies;
@@ -47,13 +47,13 @@ void VulkanSwapchain::CreateSwapchain(int width, int height,const bool vsync) {
 	createInfo.clipped = VK_TRUE;
 	createInfo.oldSwapchain = oldSwapchain;
 
-	m_Swapchain = m_Device.createSwapchainKHR(createInfo);
+	m_Swapchain = m_Device->GetDevice().createSwapchainKHR(createInfo);
 
 	if ((VkSwapchainKHR)oldSwapchain != VK_NULL_HANDLE) {
 		for (uint32_t i = 0; i < m_ImageCount; i++) {
-			m_Device.destroyImageView(m_ImageViews[i]);
+			m_Device->GetDevice().destroyImageView(m_ImageViews[i]);
 		}
-		m_Device.destroySwapchainKHR(oldSwapchain);
+		m_Device->GetDevice().destroySwapchainKHR(oldSwapchain);
 	}
 
 
@@ -102,52 +102,36 @@ SurfaceFormatKHR VulkanSwapchain::ChooseSwapchainFormat(const std::vector<Surfac
 }
 
 void VulkanSwapchain::CreateImageViews() {
-	m_Images = m_Device.getSwapchainImagesKHR(m_Swapchain);
+	m_Images = m_Device->GetDevice().getSwapchainImagesKHR(m_Swapchain);
 	m_ImageCount = m_Images.size();
 
 	m_ImageViews.clear();
 	m_ImageViews.resize(m_ImageCount);
 
 	for (uint32_t i = 0; i < m_Images.size(); i++) {
-		CreateImageView(m_Device, m_Images[i], m_ColourFormat, ImageAspectFlagBits::eColor, m_ImageViews[i]);
+		CreateImageView(m_Device->GetDevice(), m_Images[i], m_ColourFormat, ImageAspectFlagBits::eColor, m_ImageViews[i]);
 	}
 }
 
-VulkanSwapchain::VulkanSwapchain(Instance instance, Device device, PhysicalDevice pDevice, SurfaceKHR surface, QueueIndecieSet indecies) {
+VulkanSwapchain::VulkanSwapchain(Instance instance, VulkanDevice* device) {
 	m_Instance = instance;
 	m_Device = device;
-	m_PhysicalDevice = pDevice;
-	m_Surface = surface;
-	m_GraphicsQueueIndex = indecies.Graphics;
-	m_PresentQueueIndex = indecies.Present;
-	m_GraphicsQueue = m_Device.getQueue(m_GraphicsQueueIndex, 0);
-	m_PresentQueue = m_Device.getQueue(m_PresentQueueIndex, 0);
+	m_PhysicalDevice = device->GetPhysicalDevice();
+	m_Surface = device->GetSurface();
+	m_QueueIndecies = device->GetQueueIndecies();
+	m_Queues = device->GetQueueSet();
 }
 
 void VulkanSwapchain::DestroySwapchain() {
-	m_Device.waitIdle();
+	m_Device->GetDevice().waitIdle();
 	for (uint32_t i = 0; i < m_ImageCount; i++) {
-		m_Device.destroyImageView(m_ImageViews[i]);
+		m_Device->GetDevice().destroyImageView(m_ImageViews[i]);
 	}
-	m_Device.destroySwapchainKHR(m_Swapchain);
+	m_Device->GetDevice.destroySwapchainKHR(m_Swapchain);
 }
 
 SwapchainKHR VulkanSwapchain::getSwapchain() {
 	return m_Swapchain;
-}
-
-VulkanSwapchain::QueueIndecieSet VulkanSwapchain::getQueueIndecies() {
-	QueueIndecieSet req;
-	req.Graphics = m_GraphicsQueueIndex;
-	req.Present = m_PresentQueueIndex;
-	return req;
-}
-
-VulkanSwapchain::QueueSet VulkanSwapchain::getQueues() {
-	QueueSet req;
-	req.Graphics = m_GraphicsQueue;
-	req.Present = m_PresentQueue;
-	return req;
 }
 
 Extent2D VulkanSwapchain::getExtent() {
